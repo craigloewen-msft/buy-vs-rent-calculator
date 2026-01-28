@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buy vs Rent Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link data-trunk rel="copy-file" href="chart.js" />
+    <link data-trunk rel="rust" data-wasm-opt="z" />
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        :root {
+            --buy-color: #2563eb;
+            --rent-color: #dc2626;
+            --neutral-color: #6b7280;
+            --bg-color: #f9fafb;
+            --card-bg: #ffffff;
+            --text-color: #1f2937;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2rem;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 30px;
+        }
+
+        .result-banner {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 16px 24px;
+            margin-bottom: 30px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 10px;
+            z-index: 100;
+            backdrop-filter: blur(8px);
+            background: rgba(255, 255, 255, 0.95);
+            transition: box-shadow 0.2s, padding 0.2s;
+        }
+
+        .result-banner:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .result-banner.buy-wins {
+            border-left: 4px solid var(--buy-color);
+        }
+
+        .result-banner.rent-wins {
+            border-left: 4px solid var(--rent-color);
+        }
+
+        .result-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .result-title.buy { color: var(--buy-color); }
+        .result-title.rent { color: var(--rent-color); }
+
+        .result-detail {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .inputs-section {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 30px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .input-group {
+            margin-bottom: 28px;
+        }
+
+        .input-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .input-label {
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+
+        .input-value {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: var(--text-color);
+        }
+
+        .slider-container {
+            position: relative;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: var(--border-color);
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--text-color);
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--text-color);
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+
+        .sensitivity-graph {
+            height: 40px;
+            margin-top: 8px;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sensitivity-bar {
+            height: 100%;
+            display: flex;
+        }
+
+        .sensitivity-segment {
+            height: 100%;
+            transition: opacity 0.1s;
+        }
+
+        .current-marker {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--text-color);
+            z-index: 10;
+        }
+
+        .current-marker::after {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: -4px;
+            width: 10px;
+            height: 10px;
+            background: var(--text-color);
+            border-radius: 50%;
+        }
+
+        .sensitivity-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .slider-with-bounds {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .slider-with-bounds .slider-container {
+            flex: 1;
+        }
+
+        .bound-input {
+            min-width: 50px;
+            text-align: center;
+        }
+
+        .bound-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            padding: 2px 4px;
+        }
+
+        .bound-label.clickable {
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.15s, color 0.15s;
+        }
+
+        .bound-label.clickable:hover {
+            background-color: var(--border-color);
+            color: var(--text-color);
+        }
+
+        .bound-text-input {
+            width: 60px;
+            padding: 2px 4px;
+            font-size: 0.75rem;
+            border: 1px solid var(--text-color);
+            border-radius: 4px;
+            text-align: center;
+            outline: none;
+        }
+
+        .bound-text-input:focus {
+            border-color: var(--buy-color);
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+        }
+
+        .chart-section {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 30px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 20px 0;
+        }
+
+        .chart-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .chart-legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 15px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.buy { background: var(--buy-color); }
+        .legend-dot.rent { background: var(--rent-color); }
+
+        .breakdown-section {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 30px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .breakdown-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        @media (max-width: 600px) {
+            .breakdown-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .breakdown-column h3 {
+            font-size: 1rem;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid;
+        }
+
+        .breakdown-column.buy h3 {
+            border-color: var(--buy-color);
+            color: var(--buy-color);
+        }
+
+        .breakdown-column.rent h3 {
+            border-color: var(--rent-color);
+            color: var(--rent-color);
+        }
+
+        .breakdown-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.9rem;
+        }
+
+        .breakdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .breakdown-item.total {
+            font-weight: 600;
+            border-top: 2px solid var(--border-color);
+            margin-top: 8px;
+            padding-top: 12px;
+        }
+
+        .breakdown-item .label {
+            color: var(--text-muted);
+        }
+
+        .breakdown-item .value {
+            font-weight: 500;
+        }
+
+        .breakdown-item .value.positive {
+            color: #059669;
+        }
+
+        .breakdown-item .value.negative {
+            color: var(--rent-color);
+        }
+
+        .input-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .input-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .monthly-comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        @media (max-width: 600px) {
+            .monthly-comparison {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .monthly-item {
+            text-align: center;
+            padding: 15px;
+            background: var(--bg-color);
+            border-radius: 8px;
+        }
+
+        .monthly-item.highlight {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+        }
+
+        .monthly-label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+        }
+
+        .monthly-value {
+            display: block;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .monthly-value.buy {
+            color: var(--buy-color);
+        }
+
+        .monthly-value.rent {
+            color: var(--rent-color);
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    <script src="chart.js"></script>
+</body>
+</html>
